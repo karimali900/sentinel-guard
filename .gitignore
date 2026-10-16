@@ -1,0 +1,10 @@
+# Runtime artifacts
+sentinel.log
+report.html
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

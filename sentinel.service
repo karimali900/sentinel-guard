@@ -1,0 +1,18 @@
+[Unit]
+Description=SentinelGuard 24/7 Intrusion Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# EDIT THIS PATH to where you placed sentinel.py
+ExecStart=/usr/bin/python3 /opt/sentinel_guard/sentinel.py
+Restart=always
+RestartSec=5
+# Needs to read all connections + manage firewall:
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

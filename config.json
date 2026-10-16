@@ -1,0 +1,13 @@
+{
+  "check_interval_seconds": 10,
+  "alert_cooldown_seconds": 300,
+  "max_connections_per_ip": 20,
+  "port_scan_threshold": 10,
+  "port_scan_window_seconds": 60,
+  "exposed_confirm_scans": 2,
+  "report_file": "report.html",
+  "report_interval_seconds": 60,
+  "auto_block": true,
+  "allowed_public_ips": [],
+  "log_file": "sentinel.log"
+}
