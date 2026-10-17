@@ -147,7 +147,7 @@ def fallback_notify(title: str, message: str):
     elif IS_LINUX:
         try:
             subprocess.run(["notify-send", title, message], timeout=5,
-                           capture_output=True)
+                           capture_output=True, stdin=subprocess.DEVNULL)
         except Exception:
             pass
 
