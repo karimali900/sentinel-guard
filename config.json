@@ -1,13 +1,19 @@
 {
   "check_interval_seconds": 10,
   "alert_cooldown_seconds": 300,
-  "max_connections_per_ip": 20,
-  "port_scan_threshold": 10,
-  "port_scan_window_seconds": 60,
+  "max_connections_per_ip": 40,
+  "port_scan_threshold": 50,
+  "port_scan_window_seconds": 120,
   "exposed_confirm_scans": 2,
   "report_file": "report.html",
   "report_interval_seconds": 60,
   "auto_block": true,
-  "allowed_public_ips": [],
+  "allowed_public_ips": [
+    "142.251.0.0/16",
+    "172.66.0.0/16",
+    "104.16.0.0/13",
+    "173.194.0.0/16",
+    "216.58.192.0/19"
+  ],
   "log_file": "sentinel.log"
 }

@@ -40,14 +40,20 @@ CONFIG_FILE = BASE_DIR / "config.json"
 DEFAULT_CONFIG = {
     "check_interval_seconds": 10,
     "alert_cooldown_seconds": 300,
-    "max_connections_per_ip": 20,
-    "port_scan_threshold": 10,
-    "port_scan_window_seconds": 60,
+    "max_connections_per_ip": 40,
+    "port_scan_threshold": 50,
+    "port_scan_window_seconds": 120,
     "exposed_confirm_scans": 2,
     "report_file": "report.html",
     "report_interval_seconds": 60,
     "auto_block": True,
-    "allowed_public_ips": [],
+    "allowed_public_ips": [
+        "142.251.0.0/16",
+        "172.66.0.0/16",
+        "104.16.0.0/13",
+        "173.194.0.0/16",
+        "216.58.192.0/19"
+    ],
     "log_file": "sentinel.log",
 }
 
@@ -168,8 +174,26 @@ def alert(title: str, message: str, key: str):
         popup_alert(title, f"{datetime.now():%Y-%m-%d %H:%M:%S}\n{message}")
 
 
+def is_allowed_ip(ip_str: str) -> bool:
+    """True if IP is in allowed_public_ips (supports plain IPs and CIDR ranges)."""
+    try:
+        ip = ipaddress.ip_address(ip_str.split("%")[0])
+    except ValueError:
+        return False
+    for entry in CONFIG.get("allowed_public_ips", []):
+        try:
+            if "/" in entry:
+                if ip in ipaddress.ip_network(entry, strict=False):
+                    return True
+            elif ip == ipaddress.ip_address(entry):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def block_ip(ip: str):
-    if ip in blocked_ips or ip in CONFIG.get("allowed_public_ips", []):
+    if ip in blocked_ips or is_allowed_ip(ip):
         return
     if not CONFIG.get("auto_block", True):
         logger.info(f"Auto-block disabled, would have blocked {ip}")
@@ -249,8 +273,9 @@ def scan_once():
     exposed_ports: set[int] = set()  # bound to non-loopback = reachable
     loopback_ports: set[int] = set()  # 127.0.0.1/::1 only = ignored for alerts
     port_binds: dict[int, set[str]] = defaultdict(set)  # port -> bind addrs (for report)
-    inbound_from_public: dict[str, int] = defaultdict(int)
+    inbound_from_public: dict[str, int] = defaultdict(int)  # established conns per ip
     public_hits: dict[str, set[int]] = defaultdict(set)  # ip -> set of local ports touched
+    conn_ports: dict[str, list[int]] = defaultdict(list)  # ip -> list of local ports
 
     for c in conns:
         try:
@@ -264,8 +289,10 @@ def scan_once():
             if c.raddr:
                 rip = c.raddr.ip
                 if is_public_ip(rip) and c.laddr:
-                    inbound_from_public[rip] += 1
                     public_hits[rip].add(c.laddr.port)
+                    conn_ports[rip].append(c.laddr.port)
+                    if c.status == "ESTABLISHED":
+                        inbound_from_public[rip] += 1
                     connection_history[rip].append(now)
         except Exception:
             continue
@@ -311,18 +338,30 @@ def scan_once():
         hist = connection_history[ip]
         while hist and now - hist[0] > window:
             hist.popleft()
+
+        if is_allowed_ip(ip):
+            continue  # trusted CDN / service ranges
+
         if count >= CONFIG["max_connections_per_ip"]:
             alert("Possible attack - connection flood",
-                  f"{count} inbound connections from internet IP {ip}\n"
+                  f"{count} established inbound connections from internet IP {ip}\n"
                   f"Auto-blocking this IP.",
                   key=f"flood_{ip}")
             block_ip(ip)
 
-        # 3. Port scan: one IP touching many distinct local ports
-        if len(public_hits[ip]) >= CONFIG["port_scan_threshold"]:
+        # 3. Port scan / spray: few connections but hitting many different ports.
+        # A real scan probes a wide port range with ~1 attempt per port; normal
+        # browsing (CDNs etc.) opens several connections to the SAME service ports.
+        # Requiring spray ratio >= 0.8 means a single host dense on one port is
+        # trusted while a scanner is flagged. Threshold is configurable.
+        ports = conn_ports[ip]
+        distinct = len(public_hits[ip])
+        spray_ratio = distinct / max(len(ports), 1)
+        if distinct >= CONFIG["port_scan_threshold"] and spray_ratio >= 0.8:
             alert("Possible port scan",
-                  f"Internet IP {ip} probed {len(public_hits[ip])} ports: "
-                  f"{sorted(list(public_hits[ip]))[:15]}\nAuto-blocking.",
+                  f"Internet IP {ip} probed {distinct} distinct local ports "
+                  f"({len(ports)} connections, spray {spray_ratio:.0%})\n"
+                  f"Auto-blocking.",
                   key=f"scan_{ip}")
             block_ip(ip)
             connection_history[ip].clear()
