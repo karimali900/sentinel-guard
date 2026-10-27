@@ -1,0 +1,11 @@
+test_coverage:
+  stage: test
+  image: golang:latest
+  script:
+    - go test ./... -coverprofile=coverage.out -covermode=atomic
+    - go tool cover -func=coverage.out
+  coverage: '/total:\s+\(statements\)\s+(\d+.\d+)%/'
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - coverage.out

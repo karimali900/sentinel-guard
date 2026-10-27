@@ -1,0 +1,19 @@
+lint_and_vet:
+  stage: analyze
+  image: golangci/golangci-lint:v1.63-alpine
+  cache:
+    key: golangci-lint
+    paths:
+      - ~/.cache/go-build
+      - ~/.cache/golangci-lint
+  script:
+    - go vet ./...
+    - golangci-lint run --timeout 5m
+  allow_failure: false
+
+govulncheck:
+  stage: analyze
+  image: golang:latest
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
